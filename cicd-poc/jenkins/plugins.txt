@@ -1,0 +1,11 @@
+workflow-aggregator:latest
+git:latest
+github:latest
+sonar:latest
+ansible:latest
+credentials-binding:latest
+pipeline-stage-view:latest
+blueocean:latest
+ws-cleanup:latest
+timestamper:latest
+build-timeout:latest
