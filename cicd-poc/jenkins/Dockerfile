@@ -6,6 +6,7 @@ USER root
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     libicu-dev \
+    zip \
     && rm -rf /var/lib/apt/lists/*
 
 # Install .NET 10 SDK via official script

@@ -52,11 +52,11 @@ Sobe toda a esteira localmente via Docker Compose:
 - Nexus Repository OSS
 - HashiCorp Vault (modo dev)
 
-### 🔜 Fase 2 — CI mínima
-- App .NET de exemplo (Web API)
-- `Jenkinsfile` com estágios: checkout → build → publish
-- Publicação do artefato no Nexus
-- Fechar o ciclo ponta a ponta
+### ✅ Fase 2 — CI mínima
+- App .NET 10 Minimal API (`src/BnpPoc.Api`) com endpoint `GET /health`
+- `Jenkinsfile` na raiz do repo com 6 stages: Restore → Build → Test → Publish → Archive → Upload to Nexus
+- Publicação do artefato `BnpPoc.Api-<N>.zip` no Nexus (`dotnet-artifacts`)
+- Setup manual documentado em [`cicd-poc/README.md`](cicd-poc/README.md#fase-2--manual-setup)
 
 ### 🔜 Fase 3 — Quality Gates
 - SonarQube com Quality Gate **bloqueante** (pipeline falha se não passar)
