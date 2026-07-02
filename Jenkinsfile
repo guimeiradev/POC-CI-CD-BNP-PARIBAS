@@ -120,7 +120,8 @@ pipeline {
                         --out dependency-check-report
                         --failOnCVSS ${OWASP_CVSS_THRESHOLD}
                     """,
-                    odcInstallation: 'dependency-check'
+                    odcInstallation: 'dependency-check',
+                    nvdCredentialsId: 'nvd-api-key'
                 )
             }
             post {
