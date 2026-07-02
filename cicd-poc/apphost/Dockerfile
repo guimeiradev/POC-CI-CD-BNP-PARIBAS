@@ -30,19 +30,18 @@ RUN useradd -m -s /bin/bash deploy \
 # Bake the deploy user's authorized SSH key (public half — safe to commit)
 COPY authorized_keys /home/deploy/.ssh/authorized_keys
 
-# Key-only sshd, owned release root, enable sshd unit at boot
+# Key-only sshd, owned release root, enable sshd unit at boot.
+# Also wires the multi-user.target.wants/ symlink for systemd-user-sessions.service:
+# minimal systemd images often ship without it, so the service never runs and
+# /run/nologin is never removed — SSH permanently refuses non-root logins with
+# "System is booting up" even after the target is reached.
 RUN chown -R deploy:deploy /home/deploy/.ssh \
     && chmod 600 /home/deploy/.ssh/authorized_keys \
     && mkdir -p /opt/bnppoc-api \
     && chown deploy:deploy /opt/bnppoc-api \
     && sed -i 's/^#\?PasswordAuthentication.*/PasswordAuthentication no/' /etc/ssh/sshd_config \
-    && systemctl enable ssh
-
-# Minimal systemd images often ship without the multi-user.target.wants/
-# symlink for systemd-user-sessions.service, so it never runs and /run/nologin
-# is never removed — SSH permanently refuses non-root logins with "System is
-# booting up" even after the target is reached. Wire the symlink explicitly.
-RUN ln -sf /lib/systemd/system/systemd-user-sessions.service \
-    /etc/systemd/system/multi-user.target.wants/systemd-user-sessions.service
+    && systemctl enable ssh \
+    && ln -sf /lib/systemd/system/systemd-user-sessions.service \
+        /etc/systemd/system/multi-user.target.wants/systemd-user-sessions.service
 
 # CMD inherited from base = /lib/systemd/systemd (PID 1)
