@@ -36,4 +36,11 @@ RUN chown -R deploy:deploy /home/deploy/.ssh \
     && sed -i 's/^#\?PasswordAuthentication.*/PasswordAuthentication no/' /etc/ssh/sshd_config \
     && systemctl enable ssh
 
+# Minimal systemd images often ship without the multi-user.target.wants/
+# symlink for systemd-user-sessions.service, so it never runs and /run/nologin
+# is never removed — SSH permanently refuses non-root logins with "System is
+# booting up" even after the target is reached. Wire the symlink explicitly.
+RUN ln -sf /lib/systemd/system/systemd-user-sessions.service \
+    /etc/systemd/system/multi-user.target.wants/systemd-user-sessions.service
+
 # CMD inherited from base = /lib/systemd/systemd (PID 1)

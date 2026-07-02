@@ -1,1 +1,3 @@
 # Paste the PUBLIC half of the Jenkins 'apphost-ssh' credential here (see Fase 5 Manual Setup)
+
+ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIF6eCU4bWXSd3LxV+imOQE32clxVCB1SvSFcQR82alH0 guimeiradev@guimeiradev-System-Product-Name
