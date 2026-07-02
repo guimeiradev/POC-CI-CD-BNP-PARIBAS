@@ -2,6 +2,7 @@ FROM jrei/systemd-debian:12
 
 # python3 → Ansible modules require a Python interpreter on the managed node
 # sudo    → become: true escalates the non-root deploy user to root
+# unzip   → ansible.builtin.unarchive shells out to unzip/zipinfo for .zip archives
 RUN apt-get update && apt-get install -y --no-install-recommends \
     openssh-server \
     curl \
@@ -9,6 +10,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libicu-dev \
     python3 \
     sudo \
+    unzip \
     && rm -rf /var/lib/apt/lists/*
 
 # Install ASP.NET Core 10 runtime via official script (published app needs runtime, not SDK)
