@@ -47,7 +47,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends python3-venv \
 
 # Install Ansible CLI via Python venv (mirrors the Semgrep venv; the plugin is not the binary)
 RUN python3 -m venv /opt/ansible-venv \
-    && /opt/ansible-venv/bin/pip install --quiet ansible-core \
+    && /opt/ansible-venv/bin/pip install --quiet 'ansible-core==2.19.11' \
     && ln -s /opt/ansible-venv/bin/ansible /usr/local/bin/ansible \
     && ln -s /opt/ansible-venv/bin/ansible-playbook /usr/local/bin/ansible-playbook
 

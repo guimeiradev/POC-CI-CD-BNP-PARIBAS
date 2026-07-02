@@ -72,7 +72,7 @@ Toda a esteira sobe com um único `docker compose up -d`:
 
 Pipeline fechado de ponta a ponta:
 - App .NET 10 Minimal API em `src/BnpPoc.Api` com endpoint `GET /health`
-- `Jenkinsfile` na raiz do repo com 6 stages: **Restore → Build → Test → Publish → Archive → Upload to Nexus**
+- `Jenkinsfile` na raiz do repo — nesta fase com 6 stages iniciais (**Restore → Build → Test → Publish → Archive → Upload to Nexus**); expandido para 10 stages nas Fases 3–5
 - Artefato `BnpPoc.Api-<N>.zip` publicado no Nexus (`dotnet-artifacts`) a cada build
 
 ### ✅ Fase 3 — Quality Gates
@@ -96,12 +96,13 @@ Pipeline fechado de ponta a ponta:
 - Smoke test: `/health` (200 + `healthy`) + round-trip `POST`/`GET /deployments` provando que o build deployado alcança o SQL Server
 - Equivalente Windows/IIS via WinRM (parar/reiniciar Application Pool) + endurecimento de produção documentados em [`docs/cd-windows-iis.md`](docs/cd-windows-iis.md) — não executado no PoC
 
-### 🔜 Fase 6 — Polimento
+### ✅ Fase 6 — Polimento
 
-- Webhook Git → trigger automático no push (sem precisar clicar "Build Now")
-- `Jenkinsfile` versionado no próprio repositório da aplicação
-- Agente Jenkins rodando no Windows para builds .NET Framework
-- Shared Library Jenkins com stages reutilizáveis entre projetos
+- ✅ **Trigger automático** — `triggers { pollSCM('H/2 * * * *') }` no `Jenkinsfile`: o Jenkins faz poll do SCM a cada ~2 min e dispara o build ao detectar commit em `main`, sem clicar "Build Now" e sem porta de entrada (roda 100% local)
+- ✅ **Shared Library Jenkins** — biblioteca in-repo `bnp-shared` (`jenkins-shared-library/vars/nexusUpload.groovy`) consumida via `@Library`; o stage `Upload to Nexus` usa o step `nexusUpload` reutilizável
+- ✅ **`Jenkinsfile` versionado no próprio repositório** — já desde a Fase 2 (`Pipeline script from SCM`)
+- 📄 **Webhook Git real** documentado — `githubPush()` + túnel (smee.io/ngrok), com o caveat do Jenkins Dockerizado sem URL pública em [`docs/jenkins-windows-agent.md`](docs/jenkins-windows-agent.md) e [`cicd-poc/README.md`](cicd-poc/README.md)
+- 📄 **Agente Jenkins Windows** para builds .NET Framework documentado em [`docs/jenkins-windows-agent.md`](docs/jenkins-windows-agent.md) (label `windows`, JNLP/SSH, MSBuild/nuget) — não executado no PoC (sem host Windows)
 
 ---
 
@@ -124,7 +125,11 @@ POC-CI-CD-BNP-PARIBAS/
 │           └── bnppoc-api.service.j2  # Unit systemd do bnppoc-api
 ├── docs/
 │   ├── FEATURE-MAP.md                 # Índice de features → código
-│   └── cd-windows-iis.md             # Equivalente Windows/IIS (WinRM) + endurecimento (não executado)
+│   ├── cd-windows-iis.md             # Equivalente Windows/IIS (WinRM) + endurecimento (não executado)
+│   └── jenkins-windows-agent.md      # Agente Windows .NET Framework + Shared Library + webhook (Fase 6)
+├── jenkins-shared-library/            # Shared Library `bnp-shared` (consumida via @Library)
+│   └── vars/
+│       └── nexusUpload.groovy         # Step reutilizável de upload ao Nexus
 ├── src/
 │   ├── BnpPoc.sln                     # Solution .NET
 │   ├── BnpPoc.Api/

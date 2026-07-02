@@ -16,21 +16,34 @@ Lets a caller (load balancer, monitoring probe, or developer) verify that the
 
 ## CI Build & Publish Pipeline
 
-Takes a commit on `main`, builds and tests the .NET solution, and publishes a
-versioned artifact to the Nexus repository — the mechanism by which a
-developer's change becomes a deployable package.
+Takes a commit on `main`, migrates the database, runs quality/security gates,
+builds and tests the .NET solution, and publishes a semver-versioned artifact
+(plus its checksum) to the Nexus repository — the mechanism by which a
+developer's change becomes a governed, deployable package. This is the CI half
+of a 10-stage `Jenkinsfile` (the 10th stage, `Deploy`, is documented under
+"Continuous Deployment (CD)" below).
+
+**Trigger:** Auto-triggered by `triggers { pollSCM('H/2 * * * *') }` in the
+`Jenkinsfile` — Jenkins polls the SCM every ~2 min and starts a build on a new
+commit to `main`, fully local (no public inbound URL). The real event-driven
+webhook path (`githubPush()` + smee.io/ngrok tunnel) is documented in
+`cicd-poc/README.md` (Fase 6) and `docs/jenkins-windows-agent.md`, with the
+Dockerized-Jenkins caveat.
 
 **Flow:**
 
 1. `Jenkinsfile` (Restore stage) — `dotnet restore src/BnpPoc.sln` restores NuGet packages for both projects.
-2. `Jenkinsfile` (Build stage) — `dotnet build src/BnpPoc.sln --no-restore -c Release` compiles the solution.
-3. `Jenkinsfile` (Test stage) — `dotnet test src/BnpPoc.sln --no-build -c Release` runs the xUnit tests in `src/BnpPoc.Api.Tests`.
-4. `Jenkinsfile` (Publish stage) — `dotnet publish src/BnpPoc.Api/BnpPoc.Api.csproj -c Release --no-build -o publish/` produces the deployable output.
-5. `Jenkinsfile` (Archive stage) — zips `publish/` into `BnpPoc.Api-<BUILD_NUMBER>.zip`.
-6. `Jenkinsfile` (Upload to Nexus stage) — uploads the zip via `curl -X PUT` to `http://nexus:8081/repository/dotnet-artifacts`, authenticating with the Jenkins `nexus-credentials` credential.
-7. `cicd-poc/docker-compose.yml` (`nexus` service) — receives and stores the artifact in the `dotnet-artifacts` repository (created manually per `cicd-poc/README.md`).
+2. `Jenkinsfile` (Database Migration stage) — waits for `sqlserver:1433`, then runs Liquibase (`execute-sql` to create `BnpPocDb`, then `update` against `db/changelog/db.changelog-master.xml`) using the `sqlserver-credentials` credential.
+3. `Jenkinsfile` (SonarQube Analysis stage) — brackets `dotnet build --no-restore -c Release`, `dotnet test` with coverage, and `reportgenerator` between `dotnet-sonarscanner begin/end` so MSBuild hooks capture Roslyn diagnostics (build + test run nested inside this stage by design).
+4. `Jenkinsfile` (SonarQube Quality Gate stage) — `waitForQualityGate abortPipeline: true` (5-min timeout) — blocks the pipeline if the gate fails.
+5. `Jenkinsfile` (OWASP Dependency-Check stage) — scans `src/` and fails on CVSS ≥ `OWASP_CVSS_THRESHOLD` (7); publishes the HTML/JSON report.
+6. `Jenkinsfile` (Semgrep stage) — `semgrep scan --config auto --severity ERROR --error` over `src/`, archiving `semgrep-report.json`.
+7. `Jenkinsfile` (Publish stage) — `dotnet publish src/BnpPoc.Api/BnpPoc.Api.csproj -c Release --no-build -o publish/` produces the deployable output.
+8. `Jenkinsfile` (Archive stage) — zips `publish/` into `BnpPoc.Api-${ARTIFACT_VERSION}.zip` (semver: `${BASE_VERSION}-build.${BUILD_NUMBER}`, e.g. `BnpPoc.Api-1.0.0-build.42.zip`) and writes `${ARTIFACT_NAME}.sha256` via `sha256sum`.
+9. `Jenkinsfile` (Upload to Nexus stage) — uploads the zip **and** its `.sha256` to `http://nexus:8081/repository/dotnet-artifacts`, authenticating with the Jenkins `nexus-credentials` credential. As of Fase 6 the upload is performed by the Shared Library step `jenkins-shared-library/vars/nexusUpload.groovy`, consumed via `@Library('bnp-shared@main')` at the top of the `Jenkinsfile` (registered as the `bnp-shared` Global Pipeline Library — see `cicd-poc/README.md` Fase 6).
+10. `cicd-poc/docker-compose.yml` (`nexus` service) — receives and stores the artifact + checksum in the `dotnet-artifacts` repository (created manually per `cicd-poc/README.md`).
 
-Runs in a Jenkins agent built from `cicd-poc/jenkins/Dockerfile`, which provides the .NET 10 SDK and `zip`.
+Runs in a Jenkins agent built from `cicd-poc/jenkins/Dockerfile`, which provides the .NET 10 SDK, `zip`, the SonarScanner/reportgenerator tools, Semgrep, Liquibase, and the Ansible CLI.
 
 ---
 

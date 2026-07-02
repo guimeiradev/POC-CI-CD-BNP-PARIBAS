@@ -80,7 +80,7 @@ docker exec nexus cat /nexus-data/admin.password
 | 3 ✅ | **Quality Gates** — SonarQube (coverage bloqueante), OWASP Dependency-Check, Semgrep OSS    |
 | 4 ✅ | **Empacotamento e banco** — checksum SHA256, versionamento semântico, Liquibase/SQL Server  |
 | 5 ✅ | **CD** — estágio Deploy (Ansible + systemd via SSH) no app host `apphost`; IIS/WinRM documentado |
-| 6 🔜 | **Polimento** — webhook Git, shared library Jenkins, agente Windows para .NET Framework      |
+| 6 ✅ | **Polimento** — trigger automático (pollSCM), Shared Library (`nexusUpload`); webhook real e agente Windows documentados |
 
 ---
 
@@ -409,3 +409,50 @@ docker exec apphost curl -s localhost:5000/health    # contém "healthy"
 ```
 
 > **Tradeoffs de PoC:** o `apphost` roda com `privileged: true` (necessário para bootar o systemd dentro de um container) e o usuário `deploy` tem `sudo` **sem senha** (`NOPASSWD:ALL`). Ambos são conveniências de laboratório descartável — **não usar em produção**. O endurecimento equivalente está documentado em [`../docs/cd-windows-iis.md`](../docs/cd-windows-iis.md).
+
+## Fase 6 — Manual Setup
+
+Execute os passos abaixo **uma única vez** para habilitar o trigger automático e a Shared Library. Nenhum plugin novo é necessário — `git`, `github` e `workflow-aggregator` (que traz o `workflow-cps-global-lib`) já estão em `jenkins/plugins.txt`.
+
+### Passo 1 — Registrar a Shared Library `bnp-shared`
+
+O `Jenkinsfile` abre com `@Library('bnp-shared@main') _` e o stage `Upload to Nexus` consome o step `nexusUpload` da biblioteca. Registre-a **uma única vez**:
+
+Jenkins UI → Manage Jenkins → **System** → seção **Global Trusted Pipeline Libraries** → **Add**:
+- Name: `bnp-shared` ← idêntico ao usado em `@Library('bnp-shared@main')` no Jenkinsfile
+- Default version: `main`
+- Retrieval method: **Modern SCM** → **Git**
+- Project Repository: `git@github.com:guimeiradev/POC-CI-CD-BNP-PARIBAS.git`
+- Credentials: `github-ssh` (o mesmo credential SSH da Fase 2)
+- **Library Path:** `jenkins-shared-library` ← a biblioteca é **in-repo** (o código vive em `jenkins-shared-library/vars/nexusUpload.groovy`), não num repo separado
+- **Load implicitly:** **desmarcado** — o `Jenkinsfile` usa `@Library` explícito
+
+> Se a versão do plugin embutido na imagem não expuser o campo **Library Path** (retriever Modern SCM), a alternativa é publicar a biblioteca num repositório separado (`bnp-jenkins-shared`) com o mesmo conteúdo. A opção executada no PoC é a in-repo com Library Path.
+
+### Passo 2 — Habilitar o trigger automático (pollSCM)
+
+O trigger já está no `Jenkinsfile` (`triggers { pollSCM('H/2 * * * *') }`) — o Jenkins faz poll do SCM a cada ~2 min e dispara o build ao detectar um novo commit em `main`.
+
+> **Gotcha:** o `pollSCM` só passa a valer **após o primeiro build manual** do job (é quando o Jenkins registra o trigger a partir do `Jenkinsfile`). Rode **1 build manual** (`Build Now`) uma vez; a partir daí o poll fica ativo.
+
+Verificação: empurre um commit em `main` e aguarde ≤2 min — deve surgir um build novo com a causa **"Started by an SCM change"** no histórico do job.
+
+### Passo 3 (doc, não executado) — Webhook real
+
+O caminho de produção é dirigido por evento (latência de segundos, sem poll):
+1. Trocar/complementar o trigger por `triggers { githubPush() }` no `Jenkinsfile`.
+2. GitHub → repo → **Settings → Webhooks → Add webhook**, Payload URL `http://<jenkins-publico>/github-webhook/`, content type `application/json`.
+
+> **Caveat:** o Jenkins deste PoC roda Dockerizado, **sem URL pública** — o GitHub não alcança `localhost:8080`. Para exercitar o webhook localmente seria preciso expor o Jenkins via túnel (**smee.io** ou **ngrok**) e usar a URL do túnel como Payload URL. Por isso o **`pollSCM` é o default executado**. Detalhes em [`../docs/jenkins-windows-agent.md`](../docs/jenkins-windows-agent.md).
+
+### Verificação pós-run
+
+Após um build verde disparado pelo trigger, confirme que os **dois** artefatos chegaram ao Nexus (idêntico à Fase 4) — provando que o step `nexusUpload` da Shared Library produz o mesmo resultado do upload inline anterior:
+
+```bash
+curl -s -u admin:PASSWORD \
+  "http://localhost:8081/service/rest/v1/components?repository=dotnet-artifacts" \
+  | grep BnpPoc.Api
+```
+
+Saída esperada: entradas para `BnpPoc.Api-<versão>.zip` **e** `BnpPoc.Api-<versão>.zip.sha256`.

@@ -1,5 +1,15 @@
+@Library('bnp-shared@main') _
+
 pipeline {
     agent any
+
+    triggers {
+        // Local PoC: poll SCM every ~2 min. Requires no public inbound URL — Jenkins
+        // opens the outbound connection to github.com. 'H' spreads the trigger to avoid
+        // spikes. The real webhook path (githubPush + smee.io/ngrok) is documented but
+        // not executed here.
+        pollSCM('H/2 * * * *')
+    }
 
     environment {
         DOTNET_ROOT          = '/usr/share/dotnet'
@@ -165,23 +175,8 @@ pipeline {
 
         stage('Upload to Nexus') {
             steps {
-                withCredentials([usernamePassword(
-                    credentialsId: 'nexus-credentials',
-                    usernameVariable: 'NEXUS_USER',
-                    passwordVariable: 'NEXUS_PASS'
-                )]) {
-                    sh '''
-                        curl -u ${NEXUS_USER}:${NEXUS_PASS} \
-                             -X PUT "${NEXUS_URL}/${ARTIFACT_NAME}" \
-                             --upload-file "${ARTIFACT_NAME}" \
-                             --fail --silent --show-error
-
-                        curl -u ${NEXUS_USER}:${NEXUS_PASS} \
-                             -X PUT "${NEXUS_URL}/${CHECKSUM_NAME}" \
-                             --upload-file "${CHECKSUM_NAME}" \
-                             --fail --silent --show-error
-                    '''
-                }
+                nexusUpload(file: env.ARTIFACT_NAME, repoUrl: env.NEXUS_URL)
+                nexusUpload(file: env.CHECKSUM_NAME, repoUrl: env.NEXUS_URL)
             }
             post {
                 always {
