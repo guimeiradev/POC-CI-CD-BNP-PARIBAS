@@ -2,3 +2,15 @@
 .memory/
 opencode.json
 .ignore
+
+# .NET build artifacts
+bin/
+obj/
+TestResults/
+publish/
+*.user
+
+# Pipeline outputs
+dependency-check-report/
+semgrep-report.json
+sonarqubecoverage/

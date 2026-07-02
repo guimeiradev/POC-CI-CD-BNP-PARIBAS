@@ -11,15 +11,20 @@ volumes:
   sonarqube_extensions:
   postgres_data:
   nexus_data:
+  sqlserver_data:
 
 services:
   jenkins:
     build: ./jenkins
     container_name: jenkins
     restart: unless-stopped
+    depends_on:
+      - sqlserver
     ports:
       - "8080:8080"
       - "50000:50000"
+    environment:
+      ConnectionStrings__BnpPocDb: "Server=sqlserver,1433;Database=BnpPocDb;User Id=sa;Password=BnpP0c!Local;TrustServerCertificate=True;"
     volumes:
       - jenkins_home:/var/jenkins_home
     networks:
@@ -79,5 +84,38 @@ services:
     command: vault server -dev -dev-listen-address=0.0.0.0:8200
     cap_add:
       - IPC_LOCK
+    networks:
+      - cicd-net
+
+  sqlserver:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    container_name: sqlserver
+    restart: unless-stopped
+    environment:
+      ACCEPT_EULA: "Y"
+      MSSQL_SA_PASSWORD: "BnpP0c!Local"
+      MSSQL_PID: "Developer"
+    ports:
+      - "1433:1433"
+    volumes:
+      - sqlserver_data:/var/opt/mssql
+    networks:
+      - cicd-net
+
+  apphost:
+    build: ./apphost
+    container_name: apphost
+    restart: unless-stopped
+    privileged: true
+    depends_on:
+      - sqlserver
+    tmpfs:
+      - /run
+      - /run/lock
+    volumes:
+      - /sys/fs/cgroup:/sys/fs/cgroup:rw
+    ports:
+      - "2222:22"
+      - "5000:5000"
     networks:
       - cicd-net

@@ -9,3 +9,4 @@ blueocean:latest
 ws-cleanup:latest
 timestamper:latest
 build-timeout:latest
+dependency-check-jenkins-plugin:latest

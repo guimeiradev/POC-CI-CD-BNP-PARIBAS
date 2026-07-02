@@ -15,6 +15,7 @@ O objetivo é reproduzir, com ferramentas gratuitas e open-source, o mesmo fluxo
 | **Semgrep** | SAST — analisa o código em busca de vulnerabilidades de segurança antes de qualquer deploy | Fortify |
 | **OWASP Dependency-Check** | Verifica se as bibliotecas NuGet usadas têm vulnerabilidades conhecidas (CVEs) | Nexus IQ / Black Duck |
 | **Nexus Repository** | Armazena os artefatos gerados pelo pipeline (`.zip` com o binário publicado). Jenkins faz upload aqui após cada build | JFrog Artifactory |
+| **SQL Server** | Armazena os dados da aplicação. Schema criado e versionado exclusivamente via Liquibase — a aplicação nunca roda migration própria | SQL Server on-prem / Azure SQL |
 | **HashiCorp Vault** | Guarda segredos (connection strings, senhas) que o Ansible usa na hora do deploy. Jenkins busca os segredos do Vault — nunca ficam hardcoded no pipeline | CyberArk |
 | **Ansible + WinRM** | Conecta ao Windows Server, para o Application Pool do IIS, publica o novo artefato e reinicia | Ansible / Octopus Deploy |
 | **Liquibase** | Roda migrations de banco de dados de forma versionada e controlada | Liquibase / Flyway |
@@ -24,26 +25,35 @@ O objetivo é reproduzir, com ferramentas gratuitas e open-source, o mesmo fluxo
 ## Arquitetura
 
 ```
-┌─────────────────────────────────────────────────────────────────────┐
-│  Máquina A — Linux (toda a esteira roda aqui via Docker Compose)    │
-│                                                                     │
-│  ┌──────────────┐  ┌─────────────────┐  ┌────────┐  ┌───────────┐  │
-│  │   Jenkins    │  │   SonarQube     │  │ Nexus  │  │   Vault   │  │
-│  │   :8080      │  │   :9000         │  │ :8081  │  │   :8200   │  │
-│  │              │  │ + Postgres:5432 │  │        │  │           │  │
-│  └──────┬───────┘  └─────────────────┘  └────────┘  └───────────┘  │
-│         │                                                            │
-│         │  Pipeline: checkout → build → test → quality gate         │
-│         │           → empacotar → upload Nexus → deploy             │
-└─────────┼────────────────────────────────────────────────────────────┘
-          │
-          │  Ansible via WinRM (Fase 5)
-          ▼
-┌──────────────────────────────────────┐
-│  Máquina B — Windows Server + IIS    │
-│  (VM no VirtualBox com avaliação)    │
-│  Necessária apenas a partir Fase 5   │
-└──────────────────────────────────────┘
+┌───────────────────────────────────────────────────────────────────────────────┐
+│  Máquina A — Linux (toda a esteira roda aqui via Docker Compose)              │
+│                                                                               │
+│  ┌──────────┐ ┌───────────────┐ ┌────────┐ ┌─────────┐ ┌──────────────────┐   │
+│  │ Jenkins  │ │  SonarQube    │ │ Nexus  │ │  Vault  │ │   SQL Server     │   │
+│  │  :8080   │ │  :9000        │ │ :8081  │ │  :8200  │ │   :1433          │   │
+│  │          │ │ + Postgres    │ │        │ │         │ │  (schema via     │   │
+│  │          │ │   :5432       │ │        │ │         │ │   Liquibase)     │   │
+│  └────┬─────┘ └───────────────┘ └────────┘ └─────────┘ └──────────────────┘   │
+│       │                                                                       │
+│       │  Pipeline (10 stages): checkout → db migration → build → test →       │
+│       │    quality gate → empacotar (checksum + semver) → upload Nexus →       │
+│       │    deploy (Ansible + systemd via SSH)                                  │
+│       │                                                                       │
+│       │  Ansible via SSH (Fase 5 — executado localmente)                       │
+│       ▼                                                                       │
+│  ┌──────────────────────────────────────────────────────────────────────┐   │
+│  │ apphost — .NET app host (systemd em container)                        │   │
+│  │  bnppoc-api.service → dotnet BnpPoc.Api.dll :5000 → SQL Server :1433  │   │
+│  └──────────────────────────────────────────────────────────────────────┘   │
+└───────────────────────────────────────────────────────────────────────────────┘
+
+        Alvo de produção documentado (não executado no PoC):
+        ┌──────────────────────────────────────┐
+        │  Máquina B — Windows Server + IIS    │
+        │  Ansible via WinRM → recycle do       │
+        │  Application Pool (ver                 │
+        │  docs/cd-windows-iis.md)              │
+        └──────────────────────────────────────┘
 ```
 
 ---
@@ -65,24 +75,26 @@ Pipeline fechado de ponta a ponta:
 - `Jenkinsfile` na raiz do repo com 6 stages: **Restore → Build → Test → Publish → Archive → Upload to Nexus**
 - Artefato `BnpPoc.Api-<N>.zip` publicado no Nexus (`dotnet-artifacts`) a cada build
 
-### 🔜 Fase 3 — Quality Gates
+### ✅ Fase 3 — Quality Gates
 
-- SonarQube com Quality Gate **bloqueante** — pipeline falha se code coverage ou issues críticos não passarem
-- OWASP Dependency-Check — bloqueia se pacotes NuGet tiverem CVEs
-- Semgrep — análise estática de segurança no código
+- SonarQube com Quality Gate **bloqueante** — coverage threshold configurável na UI do SonarQube (não hardcoded)
+- OWASP Dependency-Check — bloqueia se pacotes NuGet tiverem CVEs com CVSS ≥ 7.0
+- Semgrep OSS — análise estática de segurança, bloqueia em findings de severidade ERROR
 
-### 🔜 Fase 4 — Empacotamento e banco
+### ✅ Fase 4 — Empacotamento e banco
 
-- Zip com checksum SHA256 (fingerprint do artefato — garante integridade)
-- Versionamento semântico no Nexus (ex: `1.0.0-build.42`)
-- Liquibase rodando migrations contra SQL Server no deploy
+- Zip com checksum SHA256 (`BnpPoc.Api-<versão>.zip.sha256`) publicado no Nexus ao lado do artefato — verificável via `sha256sum -c`
+- Versionamento semântico no artefato e no Nexus (`BnpPoc.Api-1.0.0-build.<N>.zip`) — base version fixa no Jenkinsfile, build number do Jenkins
+- SQL Server real no Docker Compose + Liquibase criando o schema (`deployment_record`) antes dos testes rodarem
+- `BnpPoc.Api` usa o banco de fato — endpoints `POST /deployments` e `GET /deployments` via Dapper (não decorativo)
 
-### 🔜 Fase 5 — CD para IIS
+### ✅ Fase 5 — CD (Ansible + systemd/SSH; IIS documentado)
 
-- Jenkins busca credenciais do Vault (connection string, senha do app pool)
-- Ansible conecta ao Windows Server via WinRM
-- Sequência: **para o Application Pool → substitui os binários → inicia o pool**
-- Log de auditoria da entrega
+- Novo estágio `Deploy` no `Jenkinsfile` (10º, após `Upload to Nexus`) — roda o playbook `deploy/ansible/deploy.yml` via Ansible sobre SSH
+- App deployado num app host Linux (`apphost`) como serviço systemd `bnppoc-api` — target novo no Docker Compose (systemd em container)
+- O playbook **puxa o artefato + `.sha256` do Nexus e verifica o SHA256 antes de fazer o deploy** (hard-fail se não bater) — o que roda é provadamente o artefato governado que passou pelos quality gates
+- Smoke test: `/health` (200 + `healthy`) + round-trip `POST`/`GET /deployments` provando que o build deployado alcança o SQL Server
+- Equivalente Windows/IIS via WinRM (parar/reiniciar Application Pool) + endurecimento de produção documentados em [`docs/cd-windows-iis.md`](docs/cd-windows-iis.md) — não executado no PoC
 
 ### 🔜 Fase 6 — Polimento
 
@@ -97,20 +109,44 @@ Pipeline fechado de ponta a ponta:
 
 ```
 POC-CI-CD-BNP-PARIBAS/
-├── Jenkinsfile                        # Pipeline declarativo — 6 stages
+├── Jenkinsfile                        # Pipeline declarativo — 10 stages (última: Deploy)
+├── db/
+│   └── changelog/
+│       ├── db.changelog-master.xml    # Changelog raiz (includes)
+│       └── changesets/
+│           └── 001-create-deployment-record.xml
+├── deploy/
+│   └── ansible/                       # CD: playbook de deploy (pull Nexus + verify + systemd + smoke)
+│       ├── ansible.cfg
+│       ├── inventory.ini              # apphost (SSH, user deploy)
+│       ├── deploy.yml                 # Playbook do estágio Deploy
+│       └── templates/
+│           └── bnppoc-api.service.j2  # Unit systemd do bnppoc-api
+├── docs/
+│   ├── FEATURE-MAP.md                 # Índice de features → código
+│   └── cd-windows-iis.md             # Equivalente Windows/IIS (WinRM) + endurecimento (não executado)
 ├── src/
 │   ├── BnpPoc.sln                     # Solution .NET
 │   ├── BnpPoc.Api/
-│   │   ├── BnpPoc.Api.csproj          # .NET 10 Minimal API
-│   │   └── Program.cs                 # GET /health → {"status":"healthy"}
+│   │   ├── BnpPoc.Api.csproj          # .NET 10 Minimal API + Dapper + Microsoft.Data.SqlClient
+│   │   ├── appsettings.json           # ConnectionStrings:BnpPocDb
+│   │   ├── Program.cs                 # GET /health, POST/GET /deployments
+│   │   ├── Data/
+│   │   │   └── SqlConnectionFactory.cs
+│   │   └── Deployments/
+│   │       └── DeploymentRecord.cs
 │   └── BnpPoc.Api.Tests/
 │       ├── BnpPoc.Api.Tests.csproj    # Projeto de testes xUnit
-│       └── HealthEndpointTests.cs     # Teste de integração do endpoint
+│       ├── HealthEndpointTests.cs     # Teste de integração do endpoint /health
+│       └── DeploymentEndpointsTests.cs # Teste de integração dos endpoints /deployments
 └── cicd-poc/
-    ├── docker-compose.yml             # Orquestra Jenkins, SonarQube, Nexus, Vault
-    ├── README.md                      # Setup detalhado (Fases 1 e 2)
+    ├── docker-compose.yml             # Orquestra Jenkins, SonarQube, Nexus, Vault, SQL Server, apphost
+    ├── README.md                      # Setup detalhado (Fases 1 a 5)
+    ├── apphost/                        # Deploy target da Fase 5
+    │   ├── Dockerfile                 # systemd + sshd + python3 + sudo + runtime ASP.NET Core 10
+    │   └── authorized_keys            # Chave pública do credential apphost-ssh (placeholder)
     └── jenkins/
-        ├── Dockerfile                 # Jenkins LTS-jdk17 + .NET 10 SDK + zip
+        ├── Dockerfile                 # Jenkins LTS-jdk17 + .NET 10 SDK + quality tools + Liquibase + Ansible
         └── plugins.txt                # Plugins instalados na imagem
 ```
 
@@ -122,7 +158,7 @@ POC-CI-CD-BNP-PARIBAS/
 
 - Docker Engine 24+ e Docker Compose v2+
 - 8 GB RAM disponível (SonarQube + Elasticsearch consomem ~3 GB)
-- Portas 8080, 9000, 8081 e 8200 livres
+- Portas 8080, 9000, 8081, 8200 e 1433 livres
 
 ### 1. Subir a esteira
 
@@ -174,3 +210,7 @@ Resumo dos 6 passos manuais:
 - **.NET SDK via `dotnet-install.sh`** — instalação oficial da Microsoft, não via apt, para controlar exatamente a versão instalada.
 - **Upload ao Nexus via `curl`** — mais simples que o plugin `nexus-artifact-uploader` para PoC. Fase 4 evolui para versionamento semântico.
 - **Credenciais hardcoded no compose** — intencional para PoC local. Em produção, usar `.env` fora do repositório.
+- **Liquibase é o único dono do schema** — `BnpPoc.Api` nunca roda migrations próprias (sem `Database.Migrate()` do EF Core, sem `EnsureCreated()`). Evita dois sistemas de migration competindo pelo mesmo schema.
+- **Dapper em vez de EF Core** — acesso a dados mínimo e explícito, sem tooling de migration embutido que competiria com o Liquibase.
+- **SQL Server com senha fixa em `docker-compose.yml`** — mesmo padrão já usado para Postgres/Nexus/Vault. Não usar em produção; Fase 5 introduz Vault para credenciais de deploy real.
+- **Testcontainers rejeitado** — o container Jenkins não tem Docker socket (mesma restrição que já vetou Docker-in-Docker para o Semgrep na Fase 3). O teste de integração de `/deployments` depende do serviço `sqlserver` real do Docker Compose, migrado pelo estágio `Database Migration` antes do estágio de testes rodar.

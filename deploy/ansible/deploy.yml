@@ -1,0 +1,94 @@
+- hosts: apphosts
+  become: true
+  vars:
+    app_root: /opt/bnppoc-api
+    release_dir: "{{ app_root }}/releases/{{ artifact_version }}"
+  tasks:
+    - name: Download checksum file from Nexus
+      ansible.builtin.get_url:
+        url: "{{ nexus_url }}/{{ checksum_name }}"
+        dest: "/tmp/{{ checksum_name }}"
+        url_username: "{{ nexus_user }}"
+        url_password: "{{ nexus_pass }}"
+        force: true
+      no_log: true
+
+    - name: Read expected SHA256
+      ansible.builtin.slurp:
+        src: "/tmp/{{ checksum_name }}"
+      register: sha_file
+
+    - name: Extract expected SHA256 from checksum file
+      ansible.builtin.set_fact:
+        expected_sha256: "{{ (sha_file.content | b64decode).split()[0] }}"
+
+    - name: Download artifact and VERIFY checksum (hard fail on mismatch)
+      ansible.builtin.get_url:
+        url: "{{ nexus_url }}/{{ artifact_name }}"
+        dest: "/tmp/{{ artifact_name }}"
+        checksum: "sha256:{{ expected_sha256 }}"
+        url_username: "{{ nexus_user }}"
+        url_password: "{{ nexus_pass }}"
+        force: true
+      no_log: true
+
+    - name: Ensure release directory exists
+      ansible.builtin.file:
+        path: "{{ release_dir }}"
+        state: directory
+        owner: deploy
+
+    - name: Unpack release
+      ansible.builtin.unarchive:
+        src: "/tmp/{{ artifact_name }}"
+        dest: "{{ release_dir }}"
+        remote_src: true
+
+    - name: Point 'current' at this release (atomic swap)
+      ansible.builtin.file:
+        src: "{{ release_dir }}/publish"
+        dest: "{{ app_root }}/current"
+        state: link
+        force: true
+
+    - name: Install systemd unit
+      ansible.builtin.template:
+        src: templates/bnppoc-api.service.j2
+        dest: /etc/systemd/system/bnppoc-api.service
+
+    - name: Restart service
+      ansible.builtin.systemd_service:
+        name: bnppoc-api
+        daemon_reload: true
+        state: restarted
+        enabled: true
+
+    - name: Smoke test /health
+      ansible.builtin.uri:
+        url: http://localhost:5000/health
+        status_code: 200
+        return_content: true
+      register: health
+      until: "'healthy' in health.content"
+      retries: 10
+      delay: 3
+
+    - name: Smoke test POST /deployments
+      ansible.builtin.uri:
+        url: http://localhost:5000/deployments
+        method: POST
+        body_format: json
+        body:
+          artifactVersion: "{{ artifact_version }}"
+          buildNumber: 0
+          checksumSha256: "{{ expected_sha256 }}"
+          status: deployed
+        status_code: 201
+
+    - name: Smoke test GET /deployments contains this build
+      ansible.builtin.uri:
+        url: http://localhost:5000/deployments
+        status_code: 200
+        return_content: true
+      register: deploys
+      failed_when: "artifact_version not in deploys.content"

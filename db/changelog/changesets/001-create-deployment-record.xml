@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+    xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.29.xsd">
+
+    <changeSet id="001-create-deployment-record" author="bnp-poc">
+        <createTable tableName="deployment_record">
+            <column name="id" type="INT" autoIncrement="true">
+                <constraints primaryKey="true" nullable="false"/>
+            </column>
+            <column name="artifact_version" type="NVARCHAR(50)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="build_number" type="INT">
+                <constraints nullable="false"/>
+            </column>
+            <column name="checksum_sha256" type="CHAR(64)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="deployed_at_utc" type="DATETIME2">
+                <constraints nullable="false"/>
+            </column>
+            <column name="status" type="NVARCHAR(20)" defaultValue="pending">
+                <constraints nullable="false"/>
+            </column>
+        </createTable>
+    </changeSet>
+
+</databaseChangeLog>
