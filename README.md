@@ -68,6 +68,9 @@ Toda a esteira sobe com um único `docker compose up -d`:
 - Nexus Repository OSS
 - HashiCorp Vault em modo dev
 
+![Todos os serviços rodando via docker ps -a](docs/screenshots/docker-containers-rodando.png)
+![Repositórios do Nexus, incluindo o dotnet-artifacts usado pelo pipeline](docs/screenshots/nexus-repositorios.png)
+
 ### ✅ Fase 2 — CI mínima (pipeline funcionando)
 
 Pipeline fechado de ponta a ponta:
@@ -75,11 +78,15 @@ Pipeline fechado de ponta a ponta:
 - `Jenkinsfile` na raiz do repo — nesta fase com 6 stages iniciais (**Restore → Build → Test → Publish → Archive → Upload to Nexus**); expandido para 10 stages nas Fases 3–5
 - Artefato `BnpPoc.Api-<N>.zip` publicado no Nexus (`dotnet-artifacts`) a cada build
 
+![Pipeline Jenkins com os 10 stages, verde de ponta a ponta](docs/screenshots/jenkins-pipeline-verde.png)
+
 ### ✅ Fase 3 — Quality Gates
 
 - SonarQube com Quality Gate **bloqueante** — coverage threshold configurável na UI do SonarQube (não hardcoded)
 - OWASP Dependency-Check — bloqueia se pacotes NuGet tiverem CVEs com CVSS ≥ 7.0
 - Semgrep OSS — análise estática de segurança, bloqueia em findings de severidade ERROR
+
+![Dashboard SonarQube com Quality Gate Passed](docs/screenshots/sonarqube-quality-gate.png)
 
 ### ✅ Fase 4 — Empacotamento e banco
 
@@ -88,6 +95,8 @@ Pipeline fechado de ponta a ponta:
 - SQL Server real no Docker Compose + Liquibase criando o schema (`deployment_record`) antes dos testes rodarem
 - `BnpPoc.Api` usa o banco de fato — endpoints `POST /deployments` e `GET /deployments` via Dapper (não decorativo)
 
+![Artefatos versionados + checksum no repositório Nexus](docs/screenshots/nexus-artefatos-dotnet.png)
+
 ### ✅ Fase 5 — CD (Ansible + systemd/SSH; IIS documentado)
 
 - Novo estágio `Deploy` no `Jenkinsfile` (10º, após `Upload to Nexus`) — roda o playbook `deploy/ansible/deploy.yml` via Ansible sobre SSH
@@ -95,6 +104,11 @@ Pipeline fechado de ponta a ponta:
 - O playbook **puxa o artefato + `.sha256` do Nexus e verifica o SHA256 antes de fazer o deploy** (hard-fail se não bater) — o que roda é provadamente o artefato governado que passou pelos quality gates
 - Smoke test: `/health` (200 + `healthy`) + round-trip `POST`/`GET /deployments` provando que o build deployado alcança o SQL Server
 - Equivalente Windows/IIS via WinRM (parar/reiniciar Application Pool) + endurecimento de produção documentados em [`docs/cd-windows-iis.md`](docs/cd-windows-iis.md) — não executado no PoC
+
+App rodando de verdade no `apphost` depois do deploy, servida pelo `bnppoc-api.service` (systemd):
+
+![Resposta do GET /health](docs/screenshots/api-health-response.png)
+![Resposta do GET /deployments — histórico real de deploys, alimentado pelos smoke tests do Ansible](docs/screenshots/api-deployments-response.png)
 
 ### ✅ Fase 6 — Polimento
 
