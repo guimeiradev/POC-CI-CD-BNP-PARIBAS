@@ -37,8 +37,8 @@ COPY authorized_keys /home/deploy/.ssh/authorized_keys
 # "System is booting up" even after the target is reached.
 RUN chown -R deploy:deploy /home/deploy/.ssh \
     && chmod 600 /home/deploy/.ssh/authorized_keys \
-    && mkdir -p /opt/bnppoc-api \
-    && chown deploy:deploy /opt/bnppoc-api \
+    && mkdir -p /opt/cicdpoc-api \
+    && chown deploy:deploy /opt/cicdpoc-api \
     && sed -i 's/^#\?PasswordAuthentication.*/PasswordAuthentication no/' /etc/ssh/sshd_config \
     && systemctl enable ssh \
     && ln -sf /lib/systemd/system/systemd-user-sessions.service \

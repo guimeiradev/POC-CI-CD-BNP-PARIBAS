@@ -1,4 +1,4 @@
-@Library('bnp-shared@main') _
+@Library('cicd-shared@main') _
 
 pipeline {
     agent any
@@ -15,17 +15,17 @@ pipeline {
         DOTNET_ROOT          = '/usr/share/dotnet'
         BASE_VERSION         = '1.0.0'
         ARTIFACT_VERSION     = "${BASE_VERSION}-build.${BUILD_NUMBER}"
-        ARTIFACT_NAME        = "BnpPoc.Api-${ARTIFACT_VERSION}.zip"
+        ARTIFACT_NAME        = "CicdPoc.Api-${ARTIFACT_VERSION}.zip"
         CHECKSUM_NAME        = "${ARTIFACT_NAME}.sha256"
         NEXUS_URL            = 'http://nexus:8081/repository/dotnet-artifacts'
-        SONAR_PROJECT_KEY    = 'BnpPoc.Api'
+        SONAR_PROJECT_KEY    = 'CicdPoc.Api'
         OWASP_CVSS_THRESHOLD = '7'
     }
 
     stages {
         stage('Restore') {
             steps {
-                sh 'dotnet restore src/BnpPoc.sln'
+                sh 'dotnet restore src/CicdPoc.sln'
             }
         }
 
@@ -58,11 +58,11 @@ pipeline {
                             --url="jdbc:sqlserver://sqlserver:1433;encrypt=true;trustServerCertificate=true" \
                             --username=${DB_USER} \
                             --password=${DB_PASS} \
-                            --sql="IF DB_ID('BnpPocDb') IS NULL EXEC('CREATE DATABASE BnpPocDb');"
+                            --sql="IF DB_ID('CicdPocDb') IS NULL EXEC('CREATE DATABASE CicdPocDb');"
 
                         liquibase update \
                             --changelog-file=db/changelog/db.changelog-master.xml \
-                            --url="jdbc:sqlserver://sqlserver:1433;databaseName=BnpPocDb;encrypt=true;trustServerCertificate=true" \
+                            --url="jdbc:sqlserver://sqlserver:1433;databaseName=CicdPocDb;encrypt=true;trustServerCertificate=true" \
                             --username=${DB_USER} \
                             --password=${DB_PASS}
                     '''
@@ -83,9 +83,9 @@ pipeline {
                             /d:sonar.token="\${SONAR_AUTH_TOKEN}" \\
                             /d:sonar.coverageReportPaths="sonarqubecoverage/SonarQube.xml"
 
-                        dotnet build src/BnpPoc.sln --no-restore -c Release
+                        dotnet build src/CicdPoc.sln --no-restore -c Release
 
-                        dotnet test src/BnpPoc.sln -c Release --no-build \\
+                        dotnet test src/CicdPoc.sln -c Release --no-build \\
                             --collect:"XPlat Code Coverage" \\
                             --results-directory ./TestResults
 
@@ -162,7 +162,7 @@ pipeline {
 
         stage('Publish') {
             steps {
-                sh 'dotnet publish src/BnpPoc.Api/BnpPoc.Api.csproj -c Release --no-build -o publish/'
+                sh 'dotnet publish src/CicdPoc.Api/CicdPoc.Api.csproj -c Release --no-build -o publish/'
             }
         }
 

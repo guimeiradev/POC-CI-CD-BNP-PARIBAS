@@ -2,7 +2,7 @@ using System.Net.Http.Json;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Xunit;
 
-namespace BnpPoc.Api.Tests;
+namespace CicdPoc.Api.Tests;
 
 public class DeploymentEndpointsTests : IClassFixture<WebApplicationFactory<Program>>
 {

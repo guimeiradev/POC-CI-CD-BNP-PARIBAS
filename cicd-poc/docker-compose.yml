@@ -22,7 +22,7 @@ services:
       - "8080:8080"
       - "50000:50000"
     environment:
-      ConnectionStrings__BnpPocDb: "Server=sqlserver,1433;Database=BnpPocDb;User Id=sa;Password=BnpP0c!Local;TrustServerCertificate=True;"
+      ConnectionStrings__CicdPocDb: "Server=sqlserver,1433;Database=CicdPocDb;User Id=sa;Password=CicdP0c!Local;TrustServerCertificate=True;"
     volumes:
       - jenkins_home:/var/jenkins_home
     networks:
@@ -91,7 +91,7 @@ services:
     restart: unless-stopped
     environment:
       ACCEPT_EULA: "Y"
-      MSSQL_SA_PASSWORD: "BnpP0c!Local"
+      MSSQL_SA_PASSWORD: "CicdP0c!Local"
       MSSQL_PID: "Developer"
     ports:
       - "1433:1433"

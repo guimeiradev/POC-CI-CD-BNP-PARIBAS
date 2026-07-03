@@ -9,7 +9,7 @@
 > portável, no mesmo espírito de [`cd-windows-iis.md`](cd-windows-iis.md).
 >
 > Este documento também cobre dois pontos de configuração da Fase 6 que valem
-> para o PoC executado: o **setup da Shared Library** (`bnp-shared`) e o
+> para o PoC executado: o **setup da Shared Library** (`cicd-shared`) e o
 > **caminho real de webhook** (`githubPush()`) com seu caveat local.
 
 ---
@@ -118,18 +118,18 @@ fica documentado como o caminho para builds **.NET Framework** legados.
 
 ---
 
-## 7. Setup da Shared Library (`bnp-shared`)
+## 7. Setup da Shared Library (`cicd-shared`)
 
-O `Jenkinsfile` abre com `@Library('bnp-shared@main') _` e o stage `Upload to
+O `Jenkinsfile` abre com `@Library('cicd-shared@main') _` e o stage `Upload to
 Nexus` consome o step `nexusUpload` da biblioteca. Para o Jenkins resolver esse
 `@Library`, registre a biblioteca **uma única vez**:
 
 Manage Jenkins → **System** → **Global Trusted Pipeline Libraries** → **Add**:
 
-- **Name:** `bnp-shared` ← idêntico ao usado em `@Library('bnp-shared@main')`.
+- **Name:** `cicd-shared` ← idêntico ao usado em `@Library('cicd-shared@main')`.
 - **Default version:** `main`.
 - **Retrieval method:** **Modern SCM** → **Git**.
-- **Project Repository:** `git@github.com:guimeiradev/POC-CI-CD-BNP-PARIBAS.git`.
+- **Project Repository:** `git@github.com:guimeiradev/CI-CD-POC.git`.
 - **Credentials:** `github-ssh` (o mesmo credential SSH da Fase 2).
 - **Library Path:** `jenkins-shared-library` ← a biblioteca é **in-repo**, num
   subdiretório deste mesmo repositório (o código vive em
@@ -140,7 +140,7 @@ Manage Jenkins → **System** → **Global Trusted Pipeline Libraries** → **Ad
 > **Caveat do plugin:** o campo **Library Path** é exposto pelo retriever Modern
 > SCM do plugin "Pipeline: Groovy Libraries" (`workflow-cps-global-lib`). Se a
 > versão embutida do plugin não expuser esse campo, a alternativa é publicar a
-> biblioteca num repositório separado (`bnp-jenkins-shared`) com o mesmo
+> biblioteca num repositório separado (`cicd-jenkins-shared`) com o mesmo
 > conteúdo. A opção executada no PoC é a **in-repo com Library Path**.
 
 ---

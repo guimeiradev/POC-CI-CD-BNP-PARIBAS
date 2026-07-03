@@ -43,7 +43,7 @@ O objetivo é reproduzir, com ferramentas gratuitas e open-source, o mesmo fluxo
 │       ▼                                                                       │
 │  ┌──────────────────────────────────────────────────────────────────────┐   │
 │  │ apphost — .NET app host (systemd em container)                        │   │
-│  │  bnppoc-api.service → dotnet BnpPoc.Api.dll :5000 → SQL Server :1433  │   │
+│  │  cicdpoc-api.service → dotnet CicdPoc.Api.dll :5000 → SQL Server :1433│   │
 │  └──────────────────────────────────────────────────────────────────────┘   │
 └───────────────────────────────────────────────────────────────────────────────┘
 
@@ -74,9 +74,9 @@ Toda a esteira sobe com um único `docker compose up -d`:
 ### ✅ Fase 2 — CI mínima (pipeline funcionando)
 
 Pipeline fechado de ponta a ponta:
-- App .NET 10 Minimal API em `src/BnpPoc.Api` com endpoint `GET /health`
+- App .NET 10 Minimal API em `src/CicdPoc.Api` com endpoint `GET /health`
 - `Jenkinsfile` na raiz do repo — nesta fase com 6 stages iniciais (**Restore → Build → Test → Publish → Archive → Upload to Nexus**); expandido para 10 stages nas Fases 3–5
-- Artefato `BnpPoc.Api-<N>.zip` publicado no Nexus (`dotnet-artifacts`) a cada build
+- Artefato `CicdPoc.Api-<N>.zip` publicado no Nexus (`dotnet-artifacts`) a cada build
 
 ![Pipeline Jenkins com os 10 stages, verde de ponta a ponta](docs/screenshots/jenkins-pipeline-verde.png)
 
@@ -90,22 +90,22 @@ Pipeline fechado de ponta a ponta:
 
 ### ✅ Fase 4 — Empacotamento e banco
 
-- Zip com checksum SHA256 (`BnpPoc.Api-<versão>.zip.sha256`) publicado no Nexus ao lado do artefato — verificável via `sha256sum -c`
-- Versionamento semântico no artefato e no Nexus (`BnpPoc.Api-1.0.0-build.<N>.zip`) — base version fixa no Jenkinsfile, build number do Jenkins
+- Zip com checksum SHA256 (`CicdPoc.Api-<versão>.zip.sha256`) publicado no Nexus ao lado do artefato — verificável via `sha256sum -c`
+- Versionamento semântico no artefato e no Nexus (`CicdPoc.Api-1.0.0-build.<N>.zip`) — base version fixa no Jenkinsfile, build number do Jenkins
 - SQL Server real no Docker Compose + Liquibase criando o schema (`deployment_record`) antes dos testes rodarem
-- `BnpPoc.Api` usa o banco de fato — endpoints `POST /deployments` e `GET /deployments` via Dapper (não decorativo)
+- `CicdPoc.Api` usa o banco de fato — endpoints `POST /deployments` e `GET /deployments` via Dapper (não decorativo)
 
 ![Artefatos versionados + checksum no repositório Nexus](docs/screenshots/nexus-artefatos-dotnet.png)
 
 ### ✅ Fase 5 — CD (Ansible + systemd/SSH; IIS documentado)
 
 - Novo estágio `Deploy` no `Jenkinsfile` (10º, após `Upload to Nexus`) — roda o playbook `deploy/ansible/deploy.yml` via Ansible sobre SSH
-- App deployado num app host Linux (`apphost`) como serviço systemd `bnppoc-api` — target novo no Docker Compose (systemd em container)
+- App deployado num app host Linux (`apphost`) como serviço systemd `cicdpoc-api` — target novo no Docker Compose (systemd em container)
 - O playbook **puxa o artefato + `.sha256` do Nexus e verifica o SHA256 antes de fazer o deploy** (hard-fail se não bater) — o que roda é provadamente o artefato governado que passou pelos quality gates
 - Smoke test: `/health` (200 + `healthy`) + round-trip `POST`/`GET /deployments` provando que o build deployado alcança o SQL Server
 - Equivalente Windows/IIS via WinRM (parar/reiniciar Application Pool) + endurecimento de produção documentados em [`docs/cd-windows-iis.md`](docs/cd-windows-iis.md) — não executado no PoC
 
-App rodando de verdade no `apphost` depois do deploy, servida pelo `bnppoc-api.service` (systemd):
+App rodando de verdade no `apphost` depois do deploy, servida pelo `cicdpoc-api.service` (systemd):
 
 ![Resposta do GET /health](docs/screenshots/api-health-response.png)
 ![Resposta do GET /deployments — histórico real de deploys, alimentado pelos smoke tests do Ansible](docs/screenshots/api-deployments-response.png)
@@ -113,7 +113,7 @@ App rodando de verdade no `apphost` depois do deploy, servida pelo `bnppoc-api.s
 ### ✅ Fase 6 — Polimento
 
 - ✅ **Trigger automático** — `triggers { pollSCM('H/2 * * * *') }` no `Jenkinsfile`: o Jenkins faz poll do SCM a cada ~2 min e dispara o build ao detectar commit em `main`, sem clicar "Build Now" e sem porta de entrada (roda 100% local)
-- ✅ **Shared Library Jenkins** — biblioteca in-repo `bnp-shared` (`jenkins-shared-library/vars/nexusUpload.groovy`) consumida via `@Library`; o stage `Upload to Nexus` usa o step `nexusUpload` reutilizável
+- ✅ **Shared Library Jenkins** — biblioteca in-repo `cicd-shared` (`jenkins-shared-library/vars/nexusUpload.groovy`) consumida via `@Library`; o stage `Upload to Nexus` usa o step `nexusUpload` reutilizável
 - ✅ **`Jenkinsfile` versionado no próprio repositório** — já desde a Fase 2 (`Pipeline script from SCM`)
 - 📄 **Webhook Git real** documentado — `githubPush()` + túnel (smee.io/ngrok), com o caveat do Jenkins Dockerizado sem URL pública em [`docs/jenkins-windows-agent.md`](docs/jenkins-windows-agent.md) e [`cicd-poc/README.md`](cicd-poc/README.md)
 - 📄 **Agente Jenkins Windows** para builds .NET Framework documentado em [`docs/jenkins-windows-agent.md`](docs/jenkins-windows-agent.md) (label `windows`, JNLP/SSH, MSBuild/nuget) — não executado no PoC (sem host Windows)
@@ -123,7 +123,7 @@ App rodando de verdade no `apphost` depois do deploy, servida pelo `bnppoc-api.s
 ## Estrutura do repositório
 
 ```
-POC-CI-CD-BNP-PARIBAS/
+CI-CD-POC/
 ├── Jenkinsfile                        # Pipeline declarativo — 10 stages (última: Deploy)
 ├── db/
 │   └── changelog/
@@ -136,26 +136,26 @@ POC-CI-CD-BNP-PARIBAS/
 │       ├── inventory.ini              # apphost (SSH, user deploy)
 │       ├── deploy.yml                 # Playbook do estágio Deploy
 │       └── templates/
-│           └── bnppoc-api.service.j2  # Unit systemd do bnppoc-api
+│           └── cicdpoc-api.service.j2  # Unit systemd do cicdpoc-api
 ├── docs/
 │   ├── FEATURE-MAP.md                 # Índice de features → código
 │   ├── cd-windows-iis.md             # Equivalente Windows/IIS (WinRM) + endurecimento (não executado)
 │   └── jenkins-windows-agent.md      # Agente Windows .NET Framework + Shared Library + webhook (Fase 6)
-├── jenkins-shared-library/            # Shared Library `bnp-shared` (consumida via @Library)
+├── jenkins-shared-library/            # Shared Library `cicd-shared` (consumida via @Library)
 │   └── vars/
 │       └── nexusUpload.groovy         # Step reutilizável de upload ao Nexus
 ├── src/
-│   ├── BnpPoc.sln                     # Solution .NET
-│   ├── BnpPoc.Api/
-│   │   ├── BnpPoc.Api.csproj          # .NET 10 Minimal API + Dapper + Microsoft.Data.SqlClient
-│   │   ├── appsettings.json           # ConnectionStrings:BnpPocDb
+│   ├── CicdPoc.sln                    # Solution .NET
+│   ├── CicdPoc.Api/
+│   │   ├── CicdPoc.Api.csproj         # .NET 10 Minimal API + Dapper + Microsoft.Data.SqlClient
+│   │   ├── appsettings.json           # ConnectionStrings:CicdPocDb
 │   │   ├── Program.cs                 # GET /health, POST/GET /deployments
 │   │   ├── Data/
 │   │   │   └── SqlConnectionFactory.cs
 │   │   └── Deployments/
 │   │       └── DeploymentRecord.cs
-│   └── BnpPoc.Api.Tests/
-│       ├── BnpPoc.Api.Tests.csproj    # Projeto de testes xUnit
+│   └── CicdPoc.Api.Tests/
+│       ├── CicdPoc.Api.Tests.csproj   # Projeto de testes xUnit
 │       ├── HealthEndpointTests.cs     # Teste de integração do endpoint /health
 │       └── DeploymentEndpointsTests.cs # Teste de integração dos endpoints /deployments
 └── cicd-poc/
@@ -229,7 +229,7 @@ Resumo dos 6 passos manuais:
 - **.NET SDK via `dotnet-install.sh`** — instalação oficial da Microsoft, não via apt, para controlar exatamente a versão instalada.
 - **Upload ao Nexus via `curl`** — mais simples que o plugin `nexus-artifact-uploader` para PoC. Fase 4 evolui para versionamento semântico.
 - **Credenciais hardcoded no compose** — intencional para PoC local. Em produção, usar `.env` fora do repositório.
-- **Liquibase é o único dono do schema** — `BnpPoc.Api` nunca roda migrations próprias (sem `Database.Migrate()` do EF Core, sem `EnsureCreated()`). Evita dois sistemas de migration competindo pelo mesmo schema.
+- **Liquibase é o único dono do schema** — `CicdPoc.Api` nunca roda migrations próprias (sem `Database.Migrate()` do EF Core, sem `EnsureCreated()`). Evita dois sistemas de migration competindo pelo mesmo schema.
 - **Dapper em vez de EF Core** — acesso a dados mínimo e explícito, sem tooling de migration embutido que competiria com o Liquibase.
 - **SQL Server com senha fixa em `docker-compose.yml`** — mesmo padrão já usado para Postgres/Nexus/Vault. Não usar em produção; Fase 5 introduz Vault para credenciais de deploy real.
 - **Testcontainers rejeitado** — o container Jenkins não tem Docker socket (mesma restrição que já vetou Docker-in-Docker para o Semgrep na Fase 3). O teste de integração de `/deployments` depende do serviço `sqlserver` real do Docker Compose, migrado pelo estágio `Database Migration` antes do estágio de testes rodar.

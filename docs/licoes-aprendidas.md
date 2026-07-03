@@ -105,7 +105,7 @@ Cada fase acima passou por: plano do Architect → revisão adversarial (verific
 
 ### 2.9 — `apphost` sem `unzip` — Ansible `unarchive` falha
 
-- **Sintoma:** `Failed to find handler for ".../BnpPoc.Api-....zip". Make sure the required command to extract the file is installed` — `tar` tentou vários formatos (bzip2, gzip, xz, zstd) e por fim precisou de `unzip`/`zipinfo`, ausentes na imagem.
+- **Sintoma:** `Failed to find handler for ".../CicdPoc.Api-....zip". Make sure the required command to extract the file is installed` — `tar` tentou vários formatos (bzip2, gzip, xz, zstd) e por fim precisou de `unzip`/`zipinfo`, ausentes na imagem.
 - **Causa raiz:** o módulo `ansible.builtin.unarchive` do Ansible, para arquivos `.zip`, depende do binário `unzip` no **managed node** (não no control node) — a imagem do `apphost` só tinha `openssh-server curl ca-certificates libicu-dev python3 sudo`.
 - **Solução:** adicionar `unzip` ao `apt-get install` do Dockerfile do `apphost`.
 - **Como evitar/detectar cedo:** ao usar `unarchive` (ou qualquer módulo Ansible que dependa de binários externos no managed node — `unarchive`, `archive`, `get_url` com checksum, etc.), checar a documentação do módulo pela seção "Requirements" e garantir que os binários existem na imagem alvo **antes** do primeiro teste real.

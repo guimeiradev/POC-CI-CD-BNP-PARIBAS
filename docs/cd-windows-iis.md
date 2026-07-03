@@ -70,7 +70,7 @@ Executados **no Windows Server real** (não no PoC):
    ```
 
 3. IIS instalado com o ASP.NET Core Hosting Bundle (módulo `AspNetCoreModuleV2`)
-   e o Application Pool `BnpPocApiPool` criado.
+   e o Application Pool `CicdPocApiPool` criado.
 
 > No PoC apenas o `ansible-core` está instalado (venv `/opt/ansible-venv` do
 > `Jenkinsfile`/imagem Jenkins). As coleções Windows acima **não** são
@@ -94,17 +94,17 @@ equivalente IIS (documentado):
 
 Detalhes específicos do IIS:
 
-- **Caminho de deploy:** `C:\inetpub\wwwroot\BnpPoc.Api` (análogo do
-  `/opt/bnppoc-api/current` no Linux).
+- **Caminho de deploy:** `C:\inetpub\wwwroot\CicdPoc.Api` (análogo do
+  `/opt/cicdpoc-api/current` no Linux).
 - **Recycle do Application Pool:** feito com `microsoft.iis.web_app_pool`
-  usando `state: restarted` sobre o pool `BnpPocApiPool`.
+  usando `state: restarted` sobre o pool `CicdPocApiPool`.
 
   > ⚠️ **Não usar `community.windows.win_iis_webapppool`** — está **deprecado,
   > marcado para remoção na community.windows 4.0.0**. O módulo suportado é
   > `microsoft.iis.web_app_pool`.
 
 - **Sequência de deploy:** parar o Application Pool → substituir os binários em
-  `C:\inetpub\wwwroot\BnpPoc.Api` → iniciar o Application Pool. É o análogo
+  `C:\inetpub\wwwroot\CicdPoc.Api` → iniciar o Application Pool. É o análogo
   direto do `install unit → replace binaries → systemctl restart` do Linux.
 - **Sem `become`/`sudo`:** no Windows não há passo de escalonamento. As tarefas
   rodam com os privilégios da própria conta que conecta via WinRM — não existe
@@ -131,7 +131,7 @@ CA confiável no SQL Server e remover `TrustServerCertificate` (ou definir
 
 O PoC conecta ao banco como `sa` (privilégio `sysadmin`), exatamente como o
 container Jenkins já faz. **Em produção:** criar um login de **privilégio
-mínimo** com acesso restrito ao `BnpPocDb` (`db_datareader` + `db_datawriter` +
+mínimo** com acesso restrito ao `CicdPocDb` (`db_datareader` + `db_datawriter` +
 `EXECUTE` apenas nas procedures necessárias), nunca `sysadmin`.
 
 ### (c) Connection string em texto puro no `appsettings.json`
@@ -165,4 +165,4 @@ conta que conecta, sem `NOPASSWD` de sudoers.
 | Escalonamento | `become: true` (`sudo`) | Privilégios da conta WinRM (sem `become`) |
 | Confiança do host | `host_key_checking=False` (PoC) | `ansible_winrm_server_cert_validation` |
 | Ciclo de vida | `systemd` (`systemctl restart`) | IIS Application Pool (recycle) |
-| Caminho de deploy | `/opt/bnppoc-api/current` | `C:\inetpub\wwwroot\BnpPoc.Api` |
+| Caminho de deploy | `/opt/cicdpoc-api/current` | `C:\inetpub\wwwroot\CicdPoc.Api` |

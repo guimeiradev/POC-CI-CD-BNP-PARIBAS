@@ -1,7 +1,7 @@
 using Microsoft.AspNetCore.Mvc.Testing;
 using Xunit;
 
-namespace BnpPoc.Api.Tests;
+namespace CicdPoc.Api.Tests;
 
 public class HealthEndpointTests : IClassFixture<WebApplicationFactory<Program>>
 {

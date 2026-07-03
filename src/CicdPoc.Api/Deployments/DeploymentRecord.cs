@@ -1,4 +1,4 @@
-namespace BnpPoc.Api.Deployments;
+namespace CicdPoc.Api.Deployments;
 
 public sealed record DeploymentRecord(
     int Id,

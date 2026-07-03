@@ -1,7 +1,7 @@
 using System.Data;
 using Microsoft.Data.SqlClient;
 
-namespace BnpPoc.Api.Data;
+namespace CicdPoc.Api.Data;
 
 public interface IDbConnectionFactory
 {

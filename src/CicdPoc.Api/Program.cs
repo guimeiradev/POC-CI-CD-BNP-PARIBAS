@@ -1,11 +1,11 @@
 using Dapper;
-using BnpPoc.Api.Data;
-using BnpPoc.Api.Deployments;
+using CicdPoc.Api.Data;
+using CicdPoc.Api.Deployments;
 
 var builder = WebApplication.CreateBuilder(args);
 
-var connectionString = builder.Configuration.GetConnectionString("BnpPocDb")
-    ?? throw new InvalidOperationException("ConnectionStrings:BnpPocDb is not configured.");
+var connectionString = builder.Configuration.GetConnectionString("CicdPocDb")
+    ?? throw new InvalidOperationException("ConnectionStrings:CicdPocDb is not configured.");
 builder.Services.AddSingleton<IDbConnectionFactory>(new SqlConnectionFactory(connectionString));
 
 var app = builder.Build();

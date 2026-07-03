@@ -1,4 +1,4 @@
-# CI/CD POC — BNP Paribas — Fase 1
+# CI/CD POC — Fase 1
 
 Toolchain completo de CI/CD para aplicações .NET targetting IIS (Windows), com todos os serviços rodando em Linux via Docker Compose.
 
@@ -45,7 +45,7 @@ docker compose ps
 | SonarQube  | http://localhost:9000  | admin / admin                             |
 | Nexus      | http://localhost:8081  | admin / ver admin.password abaixo         |
 | Vault      | http://localhost:8200  | Token: `root`                             |
-| SQL Server | localhost:1433         | sa / BnpP0c!Local                         |
+| SQL Server | localhost:1433         | sa / CicdP0c!Local                         |
 
 ---
 
@@ -147,11 +147,11 @@ Jenkins UI → Manage Jenkins → Credentials → System → Global credentials 
 ### Passo 6 — Criar o job de Pipeline
 
 Jenkins UI → New Item:
-- Name: `BnpPoc-CI`
+- Name: `CicdPoc-CI`
 - Type: **Pipeline**
 - Definition: **Pipeline script from SCM**
 - SCM: **Git**
-- Repository URL: `git@github.com:guimeiradev/POC-CI-CD-BNP-PARIBAS.git`
+- Repository URL: `git@github.com:guimeiradev/CI-CD-POC.git`
 - Credentials: `github-ssh`
 - Branch: `*/main`
 - Script Path: `Jenkinsfile`
@@ -164,10 +164,10 @@ Após o pipeline concluir com sucesso, confirme que o artefato chegou ao Nexus:
 ```bash
 curl -s -u admin:PASSWORD \
   "http://localhost:8081/service/rest/v1/components?repository=dotnet-artifacts" \
-  | grep BnpPoc.Api
+  | grep CicdPoc.Api
 ```
 
-Saída esperada: não vazia, contendo `BnpPoc.Api`.
+Saída esperada: não vazia, contendo `CicdPoc.Api`.
 
 ## Fase 3 — Manual Setup
 
@@ -213,13 +213,13 @@ Jenkins UI → Manage Jenkins → **Configure System** → seção **SonarQube s
 O threshold de cobertura é definido **exclusivamente** na UI do SonarQube — não existe nenhum valor hardcoded no Jenkinsfile ou em qualquer arquivo do repositório.
 
 1. Acesse http://localhost:9000 → **Quality Gates** (menu superior)
-2. Clique **Create** → Name: `BnpPoc Quality Gate`
+2. Clique **Create** → Name: `CicdPoc Quality Gate`
 3. Clique **Add Condition**:
    - Metric: `Coverage`
    - Operator: `is less than`
    - Value: `(escolha o percentual mínimo, ex: 80)`
 4. Clique **Save**
-5. Para associar ao projeto: acesse **Projects** → selecione `BnpPoc.Api` (criado automaticamente na primeira análise) → aba **Project Settings** → **Quality Gate** → selecione `BnpPoc Quality Gate`
+5. Para associar ao projeto: acesse **Projects** → selecione `CicdPoc.Api` (criado automaticamente na primeira análise) → aba **Project Settings** → **Quality Gate** → selecione `CicdPoc Quality Gate`
 
 > Para alterar o threshold depois: repita o Passo 5.3, mude o valor e salve. O próximo build usará o novo valor automaticamente.
 
@@ -260,11 +260,11 @@ Se o acesso estiver bloqueado (rede corporativa), substitua `--config auto` por 
 
 Execute um build e verifique:
 
-1. Stage **SonarQube Analysis** concluída sem erro → acesse http://localhost:9000/dashboard?id=BnpPoc.Api
+1. Stage **SonarQube Analysis** concluída sem erro → acesse http://localhost:9000/dashboard?id=CicdPoc.Api
 2. Stage **SonarQube Quality Gate** passed → log mostra `Quality Gate status: OK`
 3. Stage **OWASP Dependency-Check** concluída → relatório HTML visível em Build → Dependency-Check
 4. Stage **Semgrep** concluída → `semgrep-report.json` em Build Artifacts
-5. Artefato `BnpPoc.Api-<N>.zip` visível no Nexus em `dotnet-artifacts`
+5. Artefato `CicdPoc.Api-<N>.zip` visível no Nexus em `dotnet-artifacts`
 
 ## Fase 4 — Manual Setup
 
@@ -294,14 +294,14 @@ Aguarde até o log mostrar que o serviço está pronto:
 docker logs sqlserver | grep "ready for client connections"
 ```
 
-> Senha do usuário `sa`: `BnpP0c!Local` (fixa, hardcoded em `docker-compose.yml` — mesmo padrão já usado para Postgres/Nexus/Vault neste PoC. Não usar em produção.)
+> Senha do usuário `sa`: `CicdP0c!Local` (fixa, hardcoded em `docker-compose.yml` — mesmo padrão já usado para Postgres/Nexus/Vault neste PoC. Não usar em produção.)
 
 ### Passo 3 — Adicionar credencial do SQL Server no Jenkins
 
 Jenkins UI → Manage Jenkins → Credentials → System → Global credentials → **Add Credentials**:
 - Kind: **Username with password**
 - Username: `sa`
-- Password: `BnpP0c!Local`
+- Password: `CicdP0c!Local`
 - ID: `sqlserver-credentials`
 - Description: `SQL Server sa (dev)`
 
@@ -320,28 +320,28 @@ Execute um build e verifique:
 1. Stage **Database Migration** concluída sem erro → log mostra `liquibase execute-sql` e `liquibase update` bem-sucedidos.
 2. Confirme a tabela criada:
    ```bash
-   docker exec sqlserver /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P 'BnpP0c!Local' -d BnpPocDb -Q "SELECT name FROM sys.tables;" -C
+   docker exec sqlserver /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P 'CicdP0c!Local' -d CicdPocDb -Q "SELECT name FROM sys.tables;" -C
    ```
    Saída esperada: `deployment_record`
-3. Stage **Archive** concluída → workspace contém `BnpPoc.Api-<versão>.zip` e `BnpPoc.Api-<versão>.zip.sha256`.
+3. Stage **Archive** concluída → workspace contém `CicdPoc.Api-<versão>.zip` e `CicdPoc.Api-<versão>.zip.sha256`.
 4. Stage **Upload to Nexus** concluída → confirme os dois arquivos no Nexus:
    ```bash
    curl -s -u admin:PASSWORD \
      "http://localhost:8081/service/rest/v1/components?repository=dotnet-artifacts" \
-     | grep BnpPoc.Api
+     | grep CicdPoc.Api
    ```
-   Saída esperada: entradas para `BnpPoc.Api-<versão>.zip` **e** `BnpPoc.Api-<versão>.zip.sha256`.
+   Saída esperada: entradas para `CicdPoc.Api-<versão>.zip` **e** `CicdPoc.Api-<versão>.zip.sha256`.
 5. Baixe ambos e valide a integridade localmente:
    ```bash
-   curl -u admin:PASSWORD -O "http://localhost:8081/repository/dotnet-artifacts/BnpPoc.Api-<versão>.zip"
-   curl -u admin:PASSWORD -O "http://localhost:8081/repository/dotnet-artifacts/BnpPoc.Api-<versão>.zip.sha256"
-   sha256sum -c "BnpPoc.Api-<versão>.zip.sha256"
+   curl -u admin:PASSWORD -O "http://localhost:8081/repository/dotnet-artifacts/CicdPoc.Api-<versão>.zip"
+   curl -u admin:PASSWORD -O "http://localhost:8081/repository/dotnet-artifacts/CicdPoc.Api-<versão>.zip.sha256"
+   sha256sum -c "CicdPoc.Api-<versão>.zip.sha256"
    ```
-   Saída esperada: `BnpPoc.Api-<versão>.zip: OK`
+   Saída esperada: `CicdPoc.Api-<versão>.zip: OK`
 
 ### Nota sobre mudança de nome do artefato (breaking change)
 
-A partir da Fase 4, o nome do artefato muda de `BnpPoc.Api-<BUILD_NUMBER>.zip` (ex: `BnpPoc.Api-42.zip`) para `BnpPoc.Api-<versão-semântica>.zip` (ex: `BnpPoc.Api-1.0.0-build.42.zip`). O comando de verificação da Fase 2 (`grep BnpPoc.Api`) continua funcionando sem alteração, pois faz correspondência por substring, não pelo nome exato do arquivo. Scripts externos que dependam do nome exato `BnpPoc.Api-<N>.zip` (sem o prefixo de versão) precisam ser atualizados.
+A partir da Fase 4, o nome do artefato muda de `CicdPoc.Api-<BUILD_NUMBER>.zip` (ex: `CicdPoc.Api-42.zip`) para `CicdPoc.Api-<versão-semântica>.zip` (ex: `CicdPoc.Api-1.0.0-build.42.zip`). O comando de verificação da Fase 2 (`grep CicdPoc.Api`) continua funcionando sem alteração, pois faz correspondência por substring, não pelo nome exato do arquivo. Scripts externos que dependam do nome exato `CicdPoc.Api-<N>.zip` (sem o prefixo de versão) precisam ser atualizados.
 
 ## Fase 5 — Manual Setup
 
@@ -404,7 +404,7 @@ Saída esperada: sai com código 0 e imprime uma versão do `ansible-core`. Se r
 Após um build verde, confirme que o serviço está de pé no `apphost`:
 
 ```bash
-docker exec apphost systemctl is-active bnppoc-api   # "active"
+docker exec apphost systemctl is-active cicdpoc-api   # "active"
 docker exec apphost curl -s localhost:5000/health    # contém "healthy"
 ```
 
@@ -414,20 +414,20 @@ docker exec apphost curl -s localhost:5000/health    # contém "healthy"
 
 Execute os passos abaixo **uma única vez** para habilitar o trigger automático e a Shared Library. Nenhum plugin novo é necessário — `git`, `github` e `workflow-aggregator` (que traz o `workflow-cps-global-lib`) já estão em `jenkins/plugins.txt`.
 
-### Passo 1 — Registrar a Shared Library `bnp-shared`
+### Passo 1 — Registrar a Shared Library `cicd-shared`
 
-O `Jenkinsfile` abre com `@Library('bnp-shared@main') _` e o stage `Upload to Nexus` consome o step `nexusUpload` da biblioteca. Registre-a **uma única vez**:
+O `Jenkinsfile` abre com `@Library('cicd-shared@main') _` e o stage `Upload to Nexus` consome o step `nexusUpload` da biblioteca. Registre-a **uma única vez**:
 
 Jenkins UI → Manage Jenkins → **System** → seção **Global Trusted Pipeline Libraries** → **Add**:
-- Name: `bnp-shared` ← idêntico ao usado em `@Library('bnp-shared@main')` no Jenkinsfile
+- Name: `cicd-shared` ← idêntico ao usado em `@Library('cicd-shared@main')` no Jenkinsfile
 - Default version: `main`
 - Retrieval method: **Modern SCM** → **Git**
-- Project Repository: `git@github.com:guimeiradev/POC-CI-CD-BNP-PARIBAS.git`
+- Project Repository: `git@github.com:guimeiradev/CI-CD-POC.git`
 - Credentials: `github-ssh` (o mesmo credential SSH da Fase 2)
 - **Library Path:** `jenkins-shared-library` ← a biblioteca é **in-repo** (o código vive em `jenkins-shared-library/vars/nexusUpload.groovy`), não num repo separado
 - **Load implicitly:** **desmarcado** — o `Jenkinsfile` usa `@Library` explícito
 
-> Se a versão do plugin embutido na imagem não expuser o campo **Library Path** (retriever Modern SCM), a alternativa é publicar a biblioteca num repositório separado (`bnp-jenkins-shared`) com o mesmo conteúdo. A opção executada no PoC é a in-repo com Library Path.
+> Se a versão do plugin embutido na imagem não expuser o campo **Library Path** (retriever Modern SCM), a alternativa é publicar a biblioteca num repositório separado (`cicd-jenkins-shared`) com o mesmo conteúdo. A opção executada no PoC é a in-repo com Library Path.
 
 ### Passo 2 — Habilitar o trigger automático (pollSCM)
 
@@ -452,7 +452,7 @@ Após um build verde disparado pelo trigger, confirme que os **dois** artefatos 
 ```bash
 curl -s -u admin:PASSWORD \
   "http://localhost:8081/service/rest/v1/components?repository=dotnet-artifacts" \
-  | grep BnpPoc.Api
+  | grep CicdPoc.Api
 ```
 
-Saída esperada: entradas para `BnpPoc.Api-<versão>.zip` **e** `BnpPoc.Api-<versão>.zip.sha256`.
+Saída esperada: entradas para `CicdPoc.Api-<versão>.zip` **e** `CicdPoc.Api-<versão>.zip.sha256`.

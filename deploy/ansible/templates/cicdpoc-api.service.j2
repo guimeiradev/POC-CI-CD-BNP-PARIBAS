@@ -1,0 +1,14 @@
+[Unit]
+Description=CicdPoc.Api ({{ artifact_version }})
+After=network.target
+
+[Service]
+WorkingDirectory=/opt/cicdpoc-api/current
+ExecStart=/usr/local/bin/dotnet /opt/cicdpoc-api/current/CicdPoc.Api.dll
+Restart=always
+User=deploy
+Environment=ASPNETCORE_URLS=http://0.0.0.0:5000
+Environment="ConnectionStrings__CicdPocDb=Server=sqlserver,1433;Database=CicdPocDb;User Id=sa;Password=CicdP0c!Local;TrustServerCertificate=True;"
+
+[Install]
+WantedBy=multi-user.target
